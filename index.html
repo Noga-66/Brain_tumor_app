@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Brain Tumor Detection · AI System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:#020810; --surface:#071020; --surface2:#0c1a35;
+      --border:rgba(0,180,255,0.15); --accent:#00b4ff; --accent2:#00ffcc;
+      --danger:#ff4d6d; --safe:#00e5a0; --text:#e2eaf4; --muted:#4a6080;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    html{scroll-behavior:smooth;}
+    body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;overflow-x:hidden;}
+
+    /* ── CANVAS LAYERS ── */
+    #bgCanvas{position:fixed;inset:0;z-index:0;pointer-events:none;}
+    #neuralCanvas{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0.6;}
+
+    /* ── GRID ── */
+    .grid-bg{
+      position:fixed;inset:0;z-index:0;pointer-events:none;
+      background-image:
+        linear-gradient(rgba(0,180,255,0.03) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(0,180,255,0.03) 1px,transparent 1px);
+      background-size:60px 60px;
+      animation:gridPulse 6s ease-in-out infinite;
+    }
+    @keyframes gridPulse{0%,100%{opacity:.5}50%{opacity:1}}
+
+    /* ── ORBS ── */
+    .orb{position:fixed;border-radius:50%;pointer-events:none;z-index:0;filter:blur(90px);animation:orbFloat linear infinite;}
+    .orb1{width:600px;height:600px;background:rgba(0,80,220,0.08);top:-150px;left:-150px;animation-duration:22s;}
+    .orb2{width:450px;height:450px;background:rgba(0,200,255,0.07);bottom:-100px;right:-100px;animation-duration:28s;animation-delay:-12s;}
+    .orb3{width:350px;height:350px;background:rgba(0,255,180,0.05);top:35%;left:55%;animation-duration:19s;animation-delay:-7s;}
+    @keyframes orbFloat{
+      0%,100%{transform:translate(0,0) scale(1);}
+      25%{transform:translate(50px,-40px) scale(1.06);}
+      50%{transform:translate(-30px,60px) scale(0.94);}
+      75%{transform:translate(-60px,-25px) scale(1.1);}
+    }
+
+    /* ── HEADER ── */
+    header{position:relative;z-index:10;text-align:center;padding:60px 20px 40px;animation:headerReveal 1.2s cubic-bezier(.4,0,.2,1) both;}
+    @keyframes headerReveal{from{opacity:0;transform:translateY(-40px)}to{opacity:1;transform:translateY(0)}}
+
+    .logo-wrap{width:110px;height:110px;margin:0 auto 28px;position:relative;display:flex;align-items:center;justify-content:center;}
+    .ring{position:absolute;border-radius:50%;border:2px solid transparent;}
+    .ring1{inset:0;border-top-color:var(--accent);border-right-color:var(--accent);animation:spin 3s linear infinite;}
+    .ring2{inset:12px;border-bottom-color:var(--accent2);border-left-color:var(--accent2);animation:spin 2s linear infinite reverse;}
+    .ring3{inset:26px;border-top-color:rgba(0,180,255,.4);border-left-color:rgba(0,180,255,.4);animation:spin 5s linear infinite;}
+    .logo-core{
+      width:44px;height:44px;
+      background:radial-gradient(circle,rgba(0,180,255,.35),transparent);
+      border-radius:50%;display:flex;align-items:center;justify-content:center;
+      font-size:24px;z-index:1;
+      animation:corePulse 2.5s ease-in-out infinite;
+    }
+    @keyframes corePulse{
+      0%,100%{transform:scale(1);filter:drop-shadow(0 0 8px var(--accent));}
+      50%{transform:scale(1.18);filter:drop-shadow(0 0 22px var(--accent)) drop-shadow(0 0 40px rgba(0,180,255,.4));}
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    h1{
+      font-size:clamp(2rem,5vw,3.4rem);font-weight:900;letter-spacing:-1.5px;
+      background:linear-gradient(135deg,#fff 0%,var(--accent) 45%,var(--accent2) 100%);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+      background-size:200% 200%;animation:gradientShift 4s ease infinite;margin-bottom:10px;
+    }
+    @keyframes gradientShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+
+    .subtitle{
+      color:var(--muted);font-family:'Space Mono',monospace;font-size:.72rem;
+      letter-spacing:3px;text-transform:uppercase;animation:fadeInUp 1s .4s both;
+    }
+    .subtitle::after{content:'|';animation:blink 1s step-end infinite;color:var(--accent);margin-left:2px;}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+    /* ── STATS BAR ── */
+    .stats-bar{
+      display:flex;justify-content:center;gap:40px;margin:28px auto 0;
+      max-width:500px;animation:fadeInUp 1s .6s both;flex-wrap:wrap;
+    }
+    .stat{text-align:center;}
+    .stat-num{font-size:1.5rem;font-weight:900;color:var(--accent);font-family:'Space Mono',monospace;display:block;}
+    .stat-label{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;}
+
+    /* ── MAIN ── */
+    main{position:relative;z-index:5;max-width:900px;margin:0 auto;padding:0 20px 80px;}
+
+    @keyframes fadeInUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+
+    /* ── UPLOAD ZONE ── */
+    .upload-zone{
+      background:var(--surface);border:2px dashed var(--border);border-radius:24px;
+      padding:72px 30px;text-align:center;cursor:pointer;
+      transition:all .4s cubic-bezier(.4,0,.2,1);
+      position:relative;overflow:hidden;animation:fadeInUp .9s .7s both;
+    }
+    .upload-zone::before,.upload-zone::after{
+      content:'';position:absolute;width:36px;height:36px;
+      border-color:var(--accent);border-style:solid;transition:all .4s;opacity:.35;
+    }
+    .upload-zone::before{top:18px;left:18px;border-width:2px 0 0 2px;border-radius:5px 0 0 0;}
+    .upload-zone::after{bottom:18px;right:18px;border-width:0 2px 2px 0;border-radius:0 0 5px 0;}
+    .upload-zone:hover::before,.upload-zone:hover::after,
+    .upload-zone.drag-over::before,.upload-zone.drag-over::after{opacity:1;transform:scale(1.3);}
+
+    .shimmer{
+      position:absolute;top:0;left:-100%;width:55%;height:100%;
+      background:linear-gradient(90deg,transparent,rgba(0,180,255,.06),transparent);
+      animation:shimmerSweep 3.5s ease-in-out infinite;pointer-events:none;
+    }
+    @keyframes shimmerSweep{0%{left:-100%}100%{left:210%}}
+
+    /* Corner extra accents */
+    .upload-zone .corner-tr,.upload-zone .corner-bl{
+      position:absolute;width:36px;height:36px;
+      border-color:rgba(0,255,200,.3);border-style:solid;transition:all .4s;opacity:.2;
+    }
+    .corner-tr{top:18px;right:18px;border-width:2px 2px 0 0;border-radius:0 5px 0 0;}
+    .corner-bl{bottom:18px;left:18px;border-width:0 0 2px 2px;border-radius:0 0 0 5px;}
+    .upload-zone:hover .corner-tr,.upload-zone:hover .corner-bl{opacity:.9;transform:scale(1.3);}
+
+    .upload-zone:hover,.upload-zone.drag-over{
+      border-color:var(--accent);
+      box-shadow:0 0 50px rgba(0,180,255,.28),inset 0 0 80px rgba(0,180,255,.04);
+      transform:translateY(-5px);
+    }
+
+    .upload-icon{
+      font-size:64px;margin-bottom:20px;display:block;
+      animation:iconFloat 3.5s ease-in-out infinite;
+      filter:drop-shadow(0 0 14px rgba(0,180,255,.6));
+    }
+    @keyframes iconFloat{
+      0%,100%{transform:translateY(0) rotate(0deg);}
+      33%{transform:translateY(-10px) rotate(2deg);}
+      66%{transform:translateY(-5px) rotate(-2deg);}
+    }
+    .upload-title{font-size:1.35rem;font-weight:700;margin-bottom:10px;}
+    .upload-hint{color:var(--muted);font-size:.88rem;line-height:1.7;}
+
+    .upload-btn{
+      margin-top:26px;display:inline-flex;align-items:center;gap:8px;
+      padding:13px 34px;
+      background:linear-gradient(135deg,var(--accent),#0055cc);
+      color:#fff;border:none;border-radius:50px;
+      font-family:'Inter',sans-serif;font-size:.96rem;font-weight:700;
+      cursor:pointer;transition:all .35s;
+      box-shadow:0 4px 24px rgba(0,180,255,.35);
+      position:relative;overflow:hidden;
+    }
+    .upload-btn::before{
+      content:'';position:absolute;inset:0;
+      background:linear-gradient(135deg,rgba(255,255,255,.15),transparent);
+      opacity:0;transition:opacity .3s;
+    }
+    .upload-btn:hover::before{opacity:1;}
+    .upload-btn:hover{transform:scale(1.06) translateY(-1px);box-shadow:0 8px 32px rgba(0,180,255,.5);}
+    #fileInput{display:none;}
+
+    /* ── PREVIEW ── */
+    .preview-section{
+      display:none;margin-top:24px;background:var(--surface);
+      border:1px solid var(--border);border-radius:22px;overflow:hidden;animation:popIn .45s cubic-bezier(.34,1.56,.64,1);
+    }
+    @keyframes popIn{from{opacity:0;transform:scale(.9) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
+
+    .preview-header{
+      background:var(--surface2);padding:16px 26px;
+      display:flex;align-items:center;justify-content:space-between;
+      border-bottom:1px solid var(--border);
+    }
+    .preview-header h3{font-size:.78rem;font-weight:700;color:var(--accent);letter-spacing:2px;font-family:'Space Mono',monospace;}
+    .clear-btn{
+      background:none;border:1px solid var(--muted);color:var(--muted);
+      padding:6px 16px;border-radius:30px;font-family:'Inter',sans-serif;
+      font-size:.78rem;cursor:pointer;transition:all .25s;
+    }
+    .clear-btn:hover{border-color:var(--danger);color:var(--danger);transform:scale(1.05);}
+
+    .preview-body{padding:26px;display:flex;gap:26px;align-items:center;flex-wrap:wrap;}
+    #previewImg{
+      width:210px;height:210px;object-fit:cover;border-radius:16px;
+      border:2px solid var(--border);
+      box-shadow:0 0 30px rgba(0,180,255,.25);
+      transition:transform .3s;
+    }
+    #previewImg:hover{transform:scale(1.03);}
+    .file-info{flex:1;min-width:180px;}
+    .file-name{font-weight:700;margin-bottom:8px;word-break:break-all;font-size:.95rem;}
+    .file-size{color:var(--muted);font-size:.78rem;font-family:'Space Mono',monospace;}
+
+    /* ── ANALYZE BTN ── */
+    .analyze-btn{
+      width:100%;margin-top:22px;padding:20px;
+      background:linear-gradient(135deg,#00b4ff,#00e5a0);
+      border:none;border-radius:16px;color:#020810;
+      font-family:'Inter',sans-serif;font-size:1.12rem;font-weight:900;
+      cursor:pointer;transition:all .35s;
+      box-shadow:0 6px 32px rgba(0,180,255,.4);
+      display:none;position:relative;overflow:hidden;letter-spacing:.5px;
+    }
+    .analyze-btn .btn-shine{
+      position:absolute;top:-50%;left:-60%;width:55%;height:200%;
+      background:rgba(255,255,255,.22);transform:skewX(-20deg);
+      transition:left .6s ease;
+    }
+    .analyze-btn:hover .btn-shine{left:120%;}
+    .analyze-btn:hover{transform:translateY(-3px);box-shadow:0 12px 44px rgba(0,180,255,.55);}
+    .analyze-btn:active{transform:translateY(0);}
+    .analyze-btn:disabled{opacity:.55;cursor:not-allowed;transform:none;}
+
+    /* ── LOADING ── */
+    .loading-section{display:none;text-align:center;padding:60px 20px;animation:fadeInUp .4s ease;}
+
+    /* MRI Scan animation */
+    .mri-container{
+      width:140px;height:140px;margin:0 auto 30px;
+      position:relative;display:flex;align-items:center;justify-content:center;
+    }
+    .mri-bg{
+      position:absolute;inset:0;border-radius:50%;
+      border:1px solid rgba(0,180,255,.2);
+      background:radial-gradient(circle,rgba(0,180,255,.05),transparent 70%);
+    }
+    .mri-ring-outer{
+      position:absolute;inset:0;border-radius:50%;
+      border:2px solid var(--accent);opacity:.3;
+      animation:mriPulse 2s ease-in-out infinite;
+    }
+    .mri-ring-mid{
+      position:absolute;inset:14px;border-radius:50%;
+      border:1px solid rgba(0,255,200,.4);
+      animation:mriPulse 2s ease-in-out infinite .3s;
+    }
+    @keyframes mriPulse{
+      0%,100%{transform:scale(1);opacity:.3;}
+      50%{transform:scale(1.06);opacity:.8;}
+    }
+    .mri-scan-line{
+      position:absolute;left:0;right:0;height:3px;top:0;
+      background:linear-gradient(90deg,transparent 0%,var(--accent) 30%,rgba(0,255,200,.9) 50%,var(--accent) 70%,transparent 100%);
+      box-shadow:0 0 12px var(--accent),0 0 24px rgba(0,180,255,.5);
+      animation:mriScan 1.8s cubic-bezier(.4,0,.2,1) infinite;
+      border-radius:2px;
+    }
+    @keyframes mriScan{
+      0%{top:0;opacity:0;}5%{opacity:1;}
+      95%{opacity:1;}100%{top:100%;opacity:0;}
+    }
+    .mri-brain{font-size:58px;z-index:1;animation:brainGlow 1.8s ease-in-out infinite;}
+    @keyframes brainGlow{
+      0%,100%{filter:drop-shadow(0 0 8px var(--accent));}
+      50%{filter:drop-shadow(0 0 24px var(--accent)) drop-shadow(0 0 48px rgba(0,180,255,.4));}
+    }
+
+    /* Orbiting dots */
+    .orbit-ring{
+      position:absolute;width:100%;height:100%;
+      animation:spin 4s linear infinite;
+    }
+    .orbit-dot{
+      position:absolute;width:7px;height:7px;border-radius:50%;
+      background:var(--accent2);top:-3.5px;left:50%;margin-left:-3.5px;
+      box-shadow:0 0 8px var(--accent2);
+    }
+    .orbit-ring2{position:absolute;width:80%;height:80%;top:10%;left:10%;animation:spin 6s linear infinite reverse;}
+    .orbit-dot2{
+      position:absolute;width:5px;height:5px;border-radius:50%;
+      background:var(--accent);bottom:-2.5px;left:50%;margin-left:-2.5px;
+      box-shadow:0 0 6px var(--accent);
+    }
+
+    .loading-text{font-size:1.25rem;font-weight:700;color:var(--accent);margin-bottom:10px;}
+    .loading-steps{display:flex;flex-direction:column;gap:6px;margin:16px auto;max-width:280px;text-align:left;}
+    .step{
+      display:flex;align-items:center;gap:10px;
+      font-size:.8rem;font-family:'Space Mono',monospace;
+      color:var(--muted);opacity:0;transform:translateX(-10px);
+      transition:all .4s;
+    }
+    .step.active{opacity:1;transform:translateX(0);color:var(--accent);}
+    .step.done{opacity:.6;color:var(--safe);}
+    .step-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;}
+
+    .progress-track{width:300px;height:5px;background:var(--surface2);border-radius:10px;margin:20px auto 0;overflow:hidden;}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:10px;animation:loadProgress 2.2s ease-in-out infinite;}
+    @keyframes loadProgress{
+      0%{width:0%;margin-left:0}
+      60%{width:75%}
+      100%{width:0%;margin-left:100%}
+    }
+
+    /* ── ERROR ── */
+    .error-box{
+      display:none;margin-top:22px;padding:20px 24px;
+      background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.3);
+      border-radius:16px;animation:shake .4s ease;
+    }
+    @keyframes shake{
+      0%,100%{transform:translateX(0)}
+      20%{transform:translateX(-8px)}
+      40%{transform:translateX(8px)}
+      60%{transform:translateX(-5px)}
+      80%{transform:translateX(5px)}
+    }
+    .error-box strong{color:var(--danger);display:block;margin-bottom:6px;}
+    .error-box span{color:var(--muted);font-size:.85rem;font-family:'Space Mono',monospace;}
+
+    /* ── RESULTS ── */
+    .results-section{display:none;margin-top:26px;animation:resultReveal .6s cubic-bezier(.34,1.56,.64,1);}
+    @keyframes resultReveal{from{opacity:0;transform:scale(.92) translateY(30px)}to{opacity:1;transform:scale(1) translateY(0)}}
+
+    .result-card{
+      background:var(--surface);border-radius:22px;overflow:hidden;
+      border:1px solid var(--border);position:relative;
+    }
+    .result-card::before{
+      content:'';position:absolute;inset:0;border-radius:22px;
+      border:1px solid transparent;
+      transition:border-color .5s,box-shadow .5s;
+      pointer-events:none;z-index:0;
+    }
+    .result-card.show-safe::before{border-color:rgba(0,229,160,.4);box-shadow:0 0 50px rgba(0,229,160,.12);}
+    .result-card.show-danger::before{border-color:rgba(255,77,109,.4);box-shadow:0 0 50px rgba(255,77,109,.12);}
+
+    .result-header{padding:22px 30px;display:flex;align-items:center;gap:16px;position:relative;}
+    .result-header.safe{background:linear-gradient(135deg,rgba(0,229,160,.15),rgba(0,229,160,.04));border-bottom:1px solid rgba(0,229,160,.2);}
+    .result-header.danger{background:linear-gradient(135deg,rgba(255,77,109,.15),rgba(255,77,109,.04));border-bottom:1px solid rgba(255,77,109,.2);}
+
+    .result-icon-wrap{position:relative;width:56px;height:56px;display:flex;align-items:center;justify-content:center;}
+    .result-icon-ring{
+      position:absolute;inset:0;border-radius:50%;
+      border:2px solid currentColor;opacity:.3;
+      animation:iconRing 2s ease-in-out infinite;
+    }
+    @keyframes iconRing{0%,100%{transform:scale(1);opacity:.3}50%{transform:scale(1.2);opacity:.7}}
+    .result-icon{font-size:36px;animation:iconPop .5s cubic-bezier(.34,1.56,.64,1) both;}
+    @keyframes iconPop{from{transform:scale(0) rotate(-20deg)}to{transform:scale(1) rotate(0)}}
+
+    .result-label{font-family:'Space Mono',monospace;font-size:.68rem;opacity:.6;margin-bottom:5px;text-transform:uppercase;letter-spacing:2px;}
+    .result-class{font-size:1.6rem;font-weight:900;letter-spacing:-.5px;}
+    .result-class.safe{color:var(--safe);}
+    .result-class.danger{color:var(--danger);}
+
+    .result-body{padding:26px 30px;}
+
+    /* Confidence */
+    .confidence-section{margin-bottom:26px;}
+    .conf-label{display:flex;justify-content:space-between;margin-bottom:10px;font-size:.85rem;}
+    .conf-label span:first-child{color:var(--muted);font-family:'Space Mono',monospace;font-size:.7rem;text-transform:uppercase;letter-spacing:1.5px;}
+    .conf-label span:last-child{font-weight:700;color:var(--accent2);font-family:'Space Mono',monospace;}
+    .conf-track{height:12px;background:var(--surface2);border-radius:12px;overflow:hidden;position:relative;}
+    .conf-fill{
+      height:100%;border-radius:12px;
+      transition:width 1.4s cubic-bezier(.4,0,.2,1);
+      background:linear-gradient(90deg,var(--accent),var(--accent2));
+      width:0%;position:relative;overflow:hidden;
+    }
+    .conf-fill::after{
+      content:'';position:absolute;inset:0;
+      background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);
+      animation:confShimmer 2s ease-in-out infinite;
+    }
+    @keyframes confShimmer{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+
+    /* Predictions */
+    .all-preds h4{font-size:.68rem;color:var(--muted);margin-bottom:16px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:2px;}
+    .pred-item{margin-bottom:14px;animation:predSlide .4s ease both;}
+    @keyframes predSlide{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:translateX(0)}}
+    .pred-row{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:6px;}
+    .pred-bar-track{height:7px;background:var(--surface2);border-radius:7px;overflow:hidden;}
+    .pred-bar{height:100%;border-radius:7px;transition:width 1.3s cubic-bezier(.4,0,.2,1) .3s;width:0%;}
+    .pred-bar.top{background:linear-gradient(90deg,var(--accent),var(--accent2));}
+    .pred-bar.other{background:rgba(255,255,255,.1);}
+
+    /* Particle burst canvas */
+    #burstCanvas{position:fixed;inset:0;pointer-events:none;z-index:50;opacity:0;transition:opacity .3s;}
+    #burstCanvas.active{opacity:1;}
+
+    /* Disclaimer */
+    .disclaimer{
+      margin-top:22px;padding:15px 20px;
+      background:rgba(255,165,0,.07);border:1px solid rgba(255,165,0,.18);
+      border-radius:14px;display:flex;gap:12px;align-items:flex-start;
+    }
+    .disclaimer span:first-child{font-size:1.1rem;flex-shrink:0;}
+    .disclaimer p{font-size:.79rem;color:rgba(255,200,100,.8);line-height:1.7;}
+
+    .reset-btn{
+      width:100%;margin-top:22px;padding:15px;
+      background:var(--surface);border:1px solid var(--border);
+      border-radius:14px;color:var(--muted);font-family:'Inter',sans-serif;
+      font-size:.92rem;font-weight:600;cursor:pointer;transition:all .3s;
+    }
+    .reset-btn:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px);}
+
+    /* ── SERVER STATUS ── */
+    .server-status{
+      position:fixed;top:16px;left:16px;
+      display:flex;align-items:center;gap:8px;
+      background:rgba(7,16,32,.85);backdrop-filter:blur(12px);
+      border:1px solid var(--border);padding:8px 16px;border-radius:50px;
+      font-size:.72rem;font-family:'Space Mono',monospace;z-index:100;
+      animation:fadeInUp 1s 1.2s both;
+    }
+    .status-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .3s;}
+    .status-dot.online{background:var(--safe);box-shadow:0 0 10px var(--safe);animation:dotPulse 2s infinite;}
+    .status-dot.offline{background:var(--danger);}
+    @keyframes dotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
+
+    /* ── FOOTER ── */
+    footer{
+      position:relative;z-index:5;text-align:center;padding:30px 20px 50px;
+      color:var(--muted);font-family:'Space Mono',monospace;font-size:.67rem;letter-spacing:2px;
+    }
+    .footer-line{width:60px;height:1px;background:var(--border);margin:0 auto 16px;}
+  </style>
+</head>
+<body>
+
+<!-- Canvas Layers -->
+<canvas id="bgCanvas"></canvas>
+<canvas id="neuralCanvas"></canvas>
+<canvas id="burstCanvas"></canvas>
+<div class="grid-bg"></div>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+<div class="orb orb3"></div>
+
+<!-- Server Status -->
+<div class="server-status">
+  <div class="status-dot" id="statusDot"></div>
+  <span id="statusText">Connecting...</span>
+</div>
+
+<!-- Header -->
+<header>
+  <div class="logo-wrap">
+    <div class="ring ring1"></div>
+    <div class="ring ring2"></div>
+    <div class="ring ring3"></div>
+    <div class="logo-core">🧠</div>
+  </div>
+  <h1>Brain Tumor Detection</h1>
+  <p class="subtitle">AI-Powered MRI Analysis System</p>
+  <div class="stats-bar">
+    <div class="stat"><span class="stat-num" data-count="98.7">0%</span><span class="stat-label">Accuracy</span></div>
+    <div class="stat"><span class="stat-num" data-count="4">0</span><span class="stat-label">Tumor Classes</span></div>
+    <div class="stat"><span class="stat-num" data-count="224">0</span><span class="stat-label">Input Resolution</span></div>
+  </div>
+</header>
+
+<main>
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="uploadZone">
+    <div class="shimmer"></div>
+    <div class="corner-tr"></div>
+    <div class="corner-bl"></div>
+    <span class="upload-icon">🔬</span>
+    <div class="upload-title">Upload MRI Scan</div>
+    <p class="upload-hint">Drag & drop your image here, or click to browse</p>
+    <p class="upload-hint" style="margin-top:5px;font-size:.76rem;opacity:.7;">Supports: JPG · PNG · JPEG · WEBP</p>
+    <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+      <span>📁</span> Choose File
+    </button>
+    <input type="file" id="fileInput" accept="image/*"/>
+  </div>
+
+  <!-- Preview -->
+  <div class="preview-section" id="previewSection">
+    <div class="preview-header">
+      <h3>SELECTED IMAGE</h3>
+      <button class="clear-btn" onclick="clearImage()">✕ Remove</button>
+    </div>
+    <div class="preview-body">
+      <img id="previewImg" src="" alt="Preview"/>
+      <div class="file-info">
+        <div class="file-name" id="fileName">—</div>
+        <div class="file-size" id="fileSize">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analyze Button -->
+  <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()">
+    <span class="btn-shine"></span>
+    🔍 &nbsp;Analyze with AI
+  </button>
+
+  <!-- Loading -->
+  <div class="loading-section" id="loadingSection">
+    <div class="mri-container">
+      <div class="mri-bg"></div>
+      <div class="mri-ring-outer"></div>
+      <div class="mri-ring-mid"></div>
+      <div class="orbit-ring"><div class="orbit-dot"></div></div>
+      <div class="orbit-ring2"><div class="orbit-dot2"></div></div>
+      <div class="mri-scan-line"></div>
+      <div class="mri-brain">🧠</div>
+    </div>
+    <div class="loading-text">Analyzing MRI Scan...</div>
+    <div class="loading-steps">
+      <div class="step" id="step1"><div class="step-dot"></div> Preprocessing image</div>
+      <div class="step" id="step2"><div class="step-dot"></div> Running neural network</div>
+      <div class="step" id="step3"><div class="step-dot"></div> Classifying tumor type</div>
+      <div class="step" id="step4"><div class="step-dot"></div> Calculating confidence</div>
+    </div>
+    <div class="progress-track"><div class="progress-fill"></div></div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="errorBox">
+    <strong>⚠️ Analysis Error</strong>
+    <span id="errorMsg">An unexpected error occurred.</span>
+  </div>
+
+  <!-- Results -->
+  <div class="results-section" id="resultsSection">
+    <div class="result-card" id="resultCard">
+      <div class="result-header" id="resultHeader">
+        <div class="result-icon-wrap">
+          <div class="result-icon-ring"></div>
+          <div class="result-icon" id="resultIcon">—</div>
+        </div>
+        <div>
+          <div class="result-label">Diagnosis Result</div>
+          <div class="result-class" id="resultClass">—</div>
+        </div>
+      </div>
+      <div class="result-body">
+        <div class="confidence-section">
+          <div class="conf-label">
+            <span>Confidence Score</span>
+            <span id="confValue">0%</span>
+          </div>
+          <div class="conf-track">
+            <div class="conf-fill" id="confFill"></div>
+          </div>
+        </div>
+        <div class="all-preds" id="allPredsSection">
+          <h4>Probability Distribution</h4>
+          <div id="predsList"></div>
+        </div>
+        <div class="disclaimer">
+          <span>⚕️</span>
+          <p>For educational and research purposes only. Does not replace professional medical diagnosis. Always consult a qualified physician for medical decisions.</p>
+        </div>
+      </div>
+    </div>
+    <button class="reset-btn" onclick="resetAll()">🔄 &nbsp;Analyze Another Image</button>
+  </div>
+</main>
+
+<footer>
+  <div class="footer-line"></div>
+  BRAIN TUMOR DETECTION SYSTEM · AI-POWERED · FOR RESEARCH PURPOSES ONLY
+</footer>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   PARTICLE NETWORK BACKGROUND
+═══════════════════════════════════════════════════ */
+const bgCanvas = document.getElementById('bgCanvas');
+const bgCtx = bgCanvas.getContext('2d');
+let particles = [], W, H;
+
+function resize() {
+  W = bgCanvas.width = window.innerWidth;
+  H = bgCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+class Particle {
+  constructor() { this.reset(true); }
+  reset(initial=false) {
+    this.x = Math.random()*W;
+    this.y = initial ? Math.random()*H : (Math.random() > .5 ? -5 : H+5);
+    this.vx = (Math.random()-.5)*.35;
+    this.vy = (Math.random()-.5)*.35;
+    this.r  = Math.random()*1.8+.4;
+    this.alpha = Math.random()*.5+.1;
+    this.color = Math.random()>.6 ? '0,255,200' : '0,180,255';
+    this.life = 0;
+    this.maxLife = 250+Math.random()*350;
+  }
+  update() {
+    this.x += this.vx; this.y += this.vy; this.life++;
+    if (this.life>this.maxLife||this.x<-10||this.x>W+10||this.y<-10||this.y>H+10) this.reset();
+  }
+  draw() {
+    const f = this.life<40?this.life/40:this.life>this.maxLife-40?(this.maxLife-this.life)/40:1;
+    bgCtx.beginPath();
+    bgCtx.arc(this.x,this.y,this.r,0,Math.PI*2);
+    bgCtx.fillStyle=`rgba(${this.color},${this.alpha*f})`;
+    bgCtx.fill();
+  }
+}
+
+function drawConnections() {
+  for (let i=0;i<particles.length;i++) {
+    for (let j=i+1;j<particles.length;j++) {
+      const dx=particles[i].x-particles[j].x, dy=particles[i].y-particles[j].y;
+      const d=Math.sqrt(dx*dx+dy*dy);
+      if(d<120){
+        const a=(1-d/120)*.09;
+        bgCtx.beginPath();
+        bgCtx.moveTo(particles[i].x,particles[i].y);
+        bgCtx.lineTo(particles[j].x,particles[j].y);
+        bgCtx.strokeStyle=`rgba(0,180,255,${a})`;
+        bgCtx.lineWidth=.6;
+        bgCtx.stroke();
+      }
+    }
+  }
+}
+
+for(let i=0;i<90;i++) particles.push(new Particle());
+
+function animateBg() {
+  bgCtx.clearRect(0,0,W,H);
+  drawConnections();
+  particles.forEach(p=>{p.update();p.draw();});
+  requestAnimationFrame(animateBg);
+}
+animateBg();
+
+/* ═══════════════════════════════════════════════════
+   NEURAL NETWORK CANVAS (right side decoration)
+═══════════════════════════════════════════════════ */
+const nc = document.getElementById('neuralCanvas');
+const nCtx = nc.getContext('2d');
+let nW, nH, nodes=[], t=0;
+
+function resizeNeural() { nW=nc.width=window.innerWidth; nH=nc.height=window.innerHeight; buildNodes(); }
+window.addEventListener('resize', resizeNeural);
+
+function buildNodes() {
+  nodes=[];
+  const layers=[3,5,7,5,3];
+  const xStep=nW/(layers.length+1);
+  layers.forEach((count,li)=>{
+    const x=xStep*(li+1);
+    for(let i=0;i<count;i++){
+      const y=nH/2 + (i-(count-1)/2)*70;
+      nodes.push({x,y,layer:li,ix:i,count});
+    }
+  });
+}
+resizeNeural();
+
+function drawNeural() {
+  nCtx.clearRect(0,0,nW,nH);
+  t+=.012;
+
+  // Draw connections
+  for(let i=0;i<nodes.length;i++) {
+    for(let j=0;j<nodes.length;j++) {
+      if(nodes[j].layer===nodes[i].layer+1) {
+        const pulse=(Math.sin(t*2+(i+j)*.4)+1)/2;
+        const a=.04+pulse*.06;
+        nCtx.beginPath();
+        nCtx.moveTo(nodes[i].x,nodes[i].y);
+        nCtx.lineTo(nodes[j].x,nodes[j].y);
+        nCtx.strokeStyle=`rgba(0,180,255,${a})`;
+        nCtx.lineWidth=.8;
+        nCtx.stroke();
+
+        // Traveling signal dots
+        if(Math.random()<.002){
+          const prog=(t*.5)%1;
+          const sx=nodes[i].x+(nodes[j].x-nodes[i].x)*prog;
+          const sy=nodes[i].y+(nodes[j].y-nodes[i].y)*prog;
+          nCtx.beginPath();
+          nCtx.arc(sx,sy,2.5,0,Math.PI*2);
+          nCtx.fillStyle=`rgba(0,255,200,.8)`;
+          nCtx.fill();
+        }
+      }
+    }
+  }
+
+  // Draw nodes
+  nodes.forEach((n,idx)=>{
+    const pulse=(Math.sin(t*1.5+idx*.5)+1)/2;
+    const r=4+pulse*3;
+    const a=.25+pulse*.5;
+    nCtx.beginPath();
+    nCtx.arc(n.x,n.y,r,0,Math.PI*2);
+    nCtx.fillStyle=`rgba(0,180,255,${a})`;
+    nCtx.fill();
+    nCtx.beginPath();
+    nCtx.arc(n.x,n.y,r+4,0,Math.PI*2);
+    nCtx.strokeStyle=`rgba(0,180,255,${a*.3})`;
+    nCtx.lineWidth=1;
+    nCtx.stroke();
+  });
+
+  requestAnimationFrame(drawNeural);
+}
+drawNeural();
+
+/* ═══════════════════════════════════════════════════
+   BURST PARTICLE EFFECT
+═══════════════════════════════════════════════════ */
+const burstCanvas = document.getElementById('burstCanvas');
+const bCtx = burstCanvas.getContext('2d');
+
+function resizeBurst() { burstCanvas.width=window.innerWidth; burstCanvas.height=window.innerHeight; }
+window.addEventListener('resize',resizeBurst);
+resizeBurst();
+
+function fireBurst(color='0,180,255') {
+  const cx=burstCanvas.width/2, cy=burstCanvas.height*.45;
+  const bursts=[];
+  for(let i=0;i<80;i++) {
+    const angle=Math.random()*Math.PI*2;
+    const speed=Math.random()*8+2;
+    bursts.push({
+      x:cx, y:cy,
+      vx:Math.cos(angle)*speed,
+      vy:Math.sin(angle)*speed,
+      r:Math.random()*3+1,
+      alpha:1,
+      color: Math.random()>.5?color:'0,255,200',
+      gravity:.15
+    });
+  }
+  burstCanvas.classList.add('active');
+  let frame=0;
+  function animateBurst() {
+    bCtx.clearRect(0,0,burstCanvas.width,burstCanvas.height);
+    bursts.forEach(b=>{
+      b.x+=b.vx; b.y+=b.vy; b.vy+=b.gravity;
+      b.alpha-=.018; b.vx*=.98; b.vy*=.98;
+      if(b.alpha>0){
+        bCtx.beginPath();
+        bCtx.arc(b.x,b.y,b.r,0,Math.PI*2);
+        bCtx.fillStyle=`rgba(${b.color},${b.alpha})`;
+        bCtx.fill();
+      }
+    });
+    frame++;
+    if(frame<80) requestAnimationFrame(animateBurst);
+    else burstCanvas.classList.remove('active');
+  }
+  animateBurst();
+}
+
+/* ═══════════════════════════════════════════════════
+   STATS COUNTER ANIMATION
+═══════════════════════════════════════════════════ */
+function animateCounters() {
+  document.querySelectorAll('[data-count]').forEach(el=>{
+    const target=parseFloat(el.dataset.count);
+    const isFloat=target%1!==0;
+    const start=performance.now();
+    const dur=2000;
+    function tick(now){
+      const p=Math.min((now-start)/dur,1);
+      const ease=1-Math.pow(1-p,3);
+      const val=target*ease;
+      el.textContent=(isFloat?val.toFixed(1):Math.round(val))+(isFloat?'%':'');
+      if(p<1) requestAnimationFrame(tick);
+    }
+    setTimeout(()=>requestAnimationFrame(tick), 800);
+  });
+}
+animateCounters();
+
+/* ═══════════════════════════════════════════════════
+   LOADING STEPS ANIMATION
+═══════════════════════════════════════════════════ */
+let stepTimers=[];
+function startLoadingSteps() {
+  ['step1','step2','step3','step4'].forEach((id,i)=>{
+    document.getElementById(id).className='step';
+  });
+  const delays=[0,700,1400,2100];
+  const doneDelays=[600,1300,2000,2700];
+  delays.forEach((d,i)=>{
+    stepTimers.push(setTimeout(()=>{
+      document.getElementById(`step${i+1}`).classList.add('active');
+    },d));
+  });
+  doneDelays.forEach((d,i)=>{
+    stepTimers.push(setTimeout(()=>{
+      const el=document.getElementById(`step${i+1}`);
+      el.classList.remove('active');
+      el.classList.add('done');
+    },d));
+  });
+}
+function clearSteps() {
+  stepTimers.forEach(t=>clearTimeout(t));
+  stepTimers=[];
+}
+
+/* ═══════════════════════════════════════════════════
+   CONFIDENCE COUNTER
+═══════════════════════════════════════════════════ */
+function animateConf(el,end,dur=1400){
+  const start=performance.now();
+  function tick(now){
+    const p=Math.min((now-start)/dur,1);
+    const ease=1-Math.pow(1-p,3);
+    el.textContent=Math.round(end*ease)+'%';
+    if(p<1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ═══════════════════════════════════════════════════
+   SERVER STATUS
+═══════════════════════════════════════════════════ */
+const API_URL="http://localhost:5000";
+let selectedFile=null;
+
+async function checkServer(){
+  try{
+    const r=await fetch(`${API_URL}/health`,{signal:AbortSignal.timeout(3000)});
+    if(r.ok){
+      document.getElementById('statusDot').className='status-dot online';
+      document.getElementById('statusText').textContent='Server Online';
+    } else setOffline();
+  } catch{setOffline();}
+}
+function setOffline(){
+  document.getElementById('statusDot').className='status-dot offline';
+  document.getElementById('statusText').textContent='Server Offline';
+}
+checkServer();
+setInterval(checkServer,10000);
+
+/* ═══════════════════════════════════════════════════
+   DRAG & DROP / FILE SELECTION
+═══════════════════════════════════════════════════ */
+const uploadZone=document.getElementById('uploadZone');
+uploadZone.addEventListener('dragover',e=>{e.preventDefault();uploadZone.classList.add('drag-over');});
+uploadZone.addEventListener('dragleave',()=>uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop',e=>{
+  e.preventDefault();uploadZone.classList.remove('drag-over');
+  const f=e.dataTransfer.files[0];
+  if(f&&f.type.startsWith('image/')) loadFile(f);
+});
+uploadZone.addEventListener('click',e=>{
+  if(e.target.tagName!=='BUTTON') document.getElementById('fileInput').click();
+});
+document.getElementById('fileInput').addEventListener('change',e=>{
+  if(e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+function loadFile(file){
+  selectedFile=file;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    document.getElementById('previewImg').src=e.target.result;
+    document.getElementById('fileName').textContent=file.name;
+    document.getElementById('fileSize').textContent=fmt(file.size);
+    document.getElementById('previewSection').style.display='block';
+    document.getElementById('analyzeBtn').style.display='block';
+    hideResults(); hide('errorBox'); hide('loadingSection');
+  };
+  reader.readAsDataURL(file);
+}
+
+function fmt(b){
+  if(b<1024) return b+' B';
+  if(b<1048576) return (b/1024).toFixed(1)+' KB';
+  return (b/1048576).toFixed(2)+' MB';
+}
+
+/* ═══════════════════════════════════════════════════
+   ANALYZE
+═══════════════════════════════════════════════════ */
+async function analyzeImage(){
+  if(!selectedFile) return;
+  const btn=document.getElementById('analyzeBtn');
+  btn.disabled=true;
+  hide('errorBox'); hideResults(); show('loadingSection');
+  startLoadingSteps();
+
+  const fd=new FormData();
+  fd.append('image',selectedFile);
+
+  try{
+    const res=await fetch(`${API_URL}/predict`,{method:'POST',body:fd});
+    const data=await res.json();
+    clearSteps(); hide('loadingSection');
+    if(!res.ok||data.error) showError(data.error||'Server request failed.');
+    else showResults(data.result);
+  } catch{
+    clearSteps(); hide('loadingSection');
+    showError('Cannot reach the server. Make sure app.py is running on port 5000.');
+  }
+  btn.disabled=false;
+}
+
+/* ═══════════════════════════════════════════════════
+   SHOW RESULTS
+═══════════════════════════════════════════════════ */
+function showResults(result){
+  const isTumor=result.class.toLowerCase()!=='no tumor';
+  const style=isTumor?'danger':'safe';
+  const card=document.getElementById('resultCard');
+
+  document.getElementById('resultHeader').className=`result-header ${style}`;
+  document.getElementById('resultClass').className=`result-class ${style}`;
+  document.getElementById('resultIcon').textContent=isTumor?'⚠️':'✅';
+  document.getElementById('resultClass').textContent=result.class;
+
+  card.className='result-card show-'+(isTumor?'danger':'safe');
+
+  // Fire particle burst
+  setTimeout(()=>fireBurst(isTumor?'255,77,109':'0,229,160'), 300);
+
+  // Animated confidence counter
+  animateConf(document.getElementById('confValue'), result.confidence);
+  setTimeout(()=>{ document.getElementById('confFill').style.width=result.confidence+'%'; },100);
+
+  // Predictions
+  const predsSection=document.getElementById('allPredsSection');
+  const predsList=document.getElementById('predsList');
+  predsList.innerHTML='';
+
+  if(result.all_predictions&&Object.keys(result.all_predictions).length>0){
+    predsSection.style.display='block';
+    const sorted=Object.entries(result.all_predictions).sort((a,b)=>b[1]-a[1]);
+    sorted.forEach(([cls,prob],i)=>{
+      predsList.innerHTML+=`
+        <div class="pred-item" style="animation-delay:${i*.1}s">
+          <div class="pred-row">
+            <span>${cls}</span>
+            <span style="font-weight:700;font-family:'Space Mono',monospace;font-size:.78rem;">${prob}%</span>
+          </div>
+          <div class="pred-bar-track">
+            <div class="pred-bar ${i===0?'top':'other'}" style="width:0%" data-val="${prob}"></div>
+          </div>
+        </div>`;
+    });
+    setTimeout(()=>{
+      document.querySelectorAll('.pred-bar').forEach(b=>b.style.width=b.dataset.val+'%');
+    },300);
+  } else predsSection.style.display='none';
+
+  show('resultsSection');
+}
+
+function showError(msg){ document.getElementById('errorMsg').textContent=msg; show('errorBox'); }
+function show(id){ document.getElementById(id).style.display='block'; }
+function hide(id){ document.getElementById(id).style.display='none'; }
+function hideResults(){
+  hide('resultsSection');
+  document.getElementById('resultCard').className='result-card';
+}
+function clearImage(){
+  selectedFile=null;
+  document.getElementById('fileInput').value='';
+  hide('previewSection'); hide('analyzeBtn'); hideResults(); hide('errorBox'); hide('loadingSection');
+  clearSteps();
+}
+function resetAll(){ clearImage(); window.scrollTo({top:0,behavior:'smooth'}); }
+</script>
+</body>
+</html>
