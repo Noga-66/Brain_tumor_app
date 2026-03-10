@@ -1,3 +1,4 @@
+cat > requirements.txt << 'EOF'
 fastapi>=0.110.0
 uvicorn>=0.29.0
 python-multipart>=0.0.9
@@ -5,3 +6,4 @@ tensorflow-cpu==2.21.0
 numpy>=1.23.0
 Pillow>=9.0.0
 h5py>=3.8.0
+EOF
